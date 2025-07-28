@@ -1,0 +1,25 @@
+{
+  "name": "sandbox-pay-with-sand-contract",
+  "version": "1.0.0",
+  "description": "Solidity contract for pulling $SAND via EIP-2612 permits and emitting `PaymentDone(orderId, payer, amount)` events.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/QuenumGerald/sandbox-pay-with-sand-contract.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/QuenumGerald/sandbox-pay-with-sand-contract/issues"
+  },
+  "homepage": "https://github.com/QuenumGerald/sandbox-pay-with-sand-contract#readme",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "hardhat": "^2.26.1"
+  }
+}
