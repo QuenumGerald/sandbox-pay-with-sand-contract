@@ -1,0 +1,228 @@
+import { ethers } from "hardhat";
+
+async function main() {
+  console.log("🚀 Testing SandPaymentGateway on Base Sepolia");
+  console.log("=".repeat(50));
+
+  const signers = await ethers.getSigners();
+  const deployer = signers[0];
+  const user = signers[1] || signers[0]; // Use deployer as user if only one signer
+  const feeRecipient = signers[2] || signers[0]; // Use deployer as fee recipient if needed
+  
+  console.log("Deployer address:", deployer.address);
+  console.log("User address:", user.address);
+  console.log("Fee recipient:", feeRecipient.address);
+
+  // Check balances
+  const deployerBalance = await deployer.provider.getBalance(deployer.address);
+  const userBalance = await deployer.provider.getBalance(user.address);
+
+  console.log("Deployer balance:", ethers.formatEther(deployerBalance), "ETH");
+  console.log("User balance:", ethers.formatEther(userBalance), "ETH");
+
+  if (deployerBalance < ethers.parseEther("0.01")) {
+    console.error("❌ Insufficient balance for deployment. Need at least 0.01 ETH");
+    return;
+  }
+
+  console.log("\n📦 Step 1: Deploying Mock SAND Token");
+  console.log("-".repeat(40));
+
+  // Deploy Mock SAND Token
+  const MockERC20Permit = await ethers.getContractFactory("MockERC20Permit");
+  const initialSupply = ethers.parseEther("1000000"); // 1M tokens
+  const mockSand = await MockERC20Permit.deploy("Mock SAND", "mSAND", initialSupply) as any;
+  await mockSand.waitForDeployment();
+
+  const mockSandAddress = await mockSand.getAddress();
+  console.log("✅ Mock SAND deployed at:", mockSandAddress);
+
+  // Transfer some tokens to user for testing
+  const userTokens = ethers.parseEther("10000"); // 10k tokens
+  await mockSand.transfer(user.address, userTokens);
+  console.log("✅ Transferred", ethers.formatEther(userTokens), "mSAND to user");
+
+  console.log("\n🏗️  Step 2: Deploying SandPaymentGateway");
+  console.log("-".repeat(40));
+
+  // Deploy SandPaymentGateway
+  const SandPaymentGateway = await ethers.getContractFactory("SandPaymentGateway");
+  const feeBasisPoints = 100; // 1%
+  const sandPaymentGateway = await SandPaymentGateway.deploy(
+    mockSandAddress,
+    feeBasisPoints,
+    feeRecipient.address
+  ) as any;
+  await sandPaymentGateway.waitForDeployment();
+
+  const gatewayAddress = await sandPaymentGateway.getAddress();
+  console.log("✅ SandPaymentGateway deployed at:", gatewayAddress);
+
+  console.log("\n🧪 Step 3: Testing Payment with Approval");
+  console.log("-".repeat(40));
+
+  const orderId1 = ethers.keccak256(ethers.toUtf8Bytes("test-order-1"));
+  const paymentAmount = ethers.parseEther("100"); // 100 tokens
+
+  // Approve tokens
+  await mockSand.connect(user).approve(gatewayAddress, paymentAmount);
+  console.log("✅ User approved", ethers.formatEther(paymentAmount), "mSAND");
+
+  // Make payment
+  const tx1 = await sandPaymentGateway.connect(user).pay(orderId1, paymentAmount);
+  const receipt1 = await tx1.wait();
+  console.log("✅ Payment processed, tx hash:", receipt1?.hash);
+
+  // Check event
+  const events = receipt1?.logs?.filter((log: { topics: string[]; data: any; }) => {
+    try {
+      const parsed = sandPaymentGateway.interface.parseLog({
+        topics: log.topics as string[],
+        data: log.data
+      });
+      return parsed?.name === "PaymentDone";
+    } catch {
+      return false;
+    }
+  });
+
+  if (events && events.length > 0) {
+    const parsed = sandPaymentGateway.interface.parseLog({
+      topics: events[0].topics as string[],
+      data: events[0].data
+    });
+    console.log("✅ PaymentDone event emitted:");
+    console.log("   - Order ID:", parsed?.args[0]);
+    console.log("   - Payer:", parsed?.args[1]);
+    console.log("   - Amount:", ethers.formatEther(parsed?.args[2]), "mSAND");
+  }
+
+  console.log("\n🔐 Step 4: Testing Payment with Permit (EIP-2612)");
+  console.log("-".repeat(40));
+  
+  const orderId2 = ethers.keccak256(ethers.toUtf8Bytes("test-order-2"));
+  const permitAmount = ethers.parseEther("30"); // 30 tokens (reduced amount)
+  const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+  
+  // Check user balance before permit
+  const userBalanceBefore = await mockSand.balanceOf(user.address);
+  console.log("User balance before permit:", ethers.formatEther(userBalanceBefore), "mSAND");
+
+  // Get permit signature
+  const domain = {
+    name: await mockSand.name(),
+    version: "1",
+    chainId: await user.provider.getNetwork().then(n => n.chainId),
+    verifyingContract: mockSandAddress,
+  };
+
+  const types = {
+    Permit: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+      { name: "value", type: "uint256" },
+      { name: "nonce", type: "uint256" },
+      { name: "deadline", type: "uint256" },
+    ],
+  };
+
+  const values = {
+    owner: user.address,
+    spender: gatewayAddress,
+    value: permitAmount,
+    nonce: await mockSand.nonces(user.address),
+    deadline: deadline,
+  };
+
+  const signature = await user.signTypedData(domain, types, values);
+  const { v, r, s } = ethers.Signature.from(signature);
+
+  console.log("✅ EIP-2612 permit signature created");
+
+  // Execute payWithPermit
+  const tx2 = await sandPaymentGateway.connect(user).payWithPermit(
+    orderId2,
+    permitAmount,
+    deadline,
+    v,
+    r,
+    s
+  );
+  const receipt2 = await tx2.wait();
+  console.log("✅ Permit payment processed, tx hash:", receipt2?.hash);
+
+  console.log("\n📊 Step 5: Checking Final Balances");
+  console.log("-".repeat(40));
+
+  const deployerTokenBalance = await mockSand.balanceOf(deployer.address);
+  const userTokenBalance = await mockSand.balanceOf(user.address);
+  const feeRecipientBalance = await mockSand.balanceOf(feeRecipient.address);
+  const contractBalance = await sandPaymentGateway.getBalance();
+
+  console.log("Deployer mSAND balance:", ethers.formatEther(deployerTokenBalance));
+  console.log("User mSAND balance:", ethers.formatEther(userTokenBalance));
+  console.log("Fee recipient balance:", ethers.formatEther(feeRecipientBalance));
+  console.log("Contract balance:", ethers.formatEther(contractBalance));
+
+  // Calculate expected values
+  const totalPaid = paymentAmount + permitAmount; // 150 tokens
+  const expectedFee = totalPaid * BigInt(feeBasisPoints) / BigInt(10000); // 1.5 tokens
+  const expectedNet = totalPaid - expectedFee; // 148.5 tokens
+
+  console.log("\n📈 Expected vs Actual:");
+  console.log("Expected total fee:", ethers.formatEther(expectedFee), "mSAND");
+  console.log("Actual fee recipient balance:", ethers.formatEther(feeRecipientBalance), "mSAND");
+  console.log("Expected net to deployer:", ethers.formatEther(expectedNet), "mSAND");
+
+  console.log("\n🔄 Step 5: Testing Admin Functions");
+  console.log("-".repeat(40));
+
+  // Test fee update
+  const newFee = 150; // 1.5%
+  await sandPaymentGateway.connect(deployer).updateFee(newFee);
+  const updatedFee = await sandPaymentGateway.feeBasisPoints();
+  console.log("✅ Fee updated to:", updatedFee.toString(), "basis points");
+  console.log("✅ Admin functions test completed");
+
+  console.log("\n📊 Step 6: Final Balance Check");
+  console.log("-".repeat(40));
+
+  const finalDeployerTokenBalance = await mockSand.balanceOf(deployer.address);
+  const finalUserTokenBalance = await mockSand.balanceOf(user.address);
+  const finalFeeRecipientBalance = await mockSand.balanceOf(feeRecipient.address);
+  const finalContractBalance = await sandPaymentGateway.getBalance();
+
+  console.log("Deployer mSAND balance:", ethers.formatEther(finalDeployerTokenBalance));
+  console.log("User mSAND balance:", ethers.formatEther(finalUserTokenBalance));
+  console.log("Fee recipient balance:", ethers.formatEther(finalFeeRecipientBalance));
+  console.log("Contract balance:", ethers.formatEther(finalContractBalance));
+
+  console.log("\n✅ All tests completed successfully on Base Sepolia!");
+  console.log("\n📝 Contract addresses for verification:");
+  console.log("   - Mock SAND Token:", mockSandAddress);
+  console.log("   - SandPaymentGateway:", gatewayAddress);
+
+  console.log("\n🔍 VERIFICATION COMMANDS:");
+  console.log("-".repeat(50));
+  console.log("1. Verify Mock SAND Token:");
+  console.log(`npx hardhat verify --network baseSepolia ${mockSandAddress} "Mock SAND" "mSAND" "${initialSupply.toString()}"`);
+
+  console.log("\n2. Verify SandPaymentGateway:");
+  console.log(`npx hardhat verify --network baseSepolia ${gatewayAddress} "${mockSandAddress}" ${feeBasisPoints} "${feeRecipient.address}"`);
+
+  console.log("\n🌐 View on Basescan:");
+  console.log(`   - Mock SAND: https://sepolia.basescan.org/address/${mockSandAddress}`);
+  console.log(`   - Gateway: https://sepolia.basescan.org/address/${gatewayAddress}`);
+
+  // Save to .env for easy access
+  console.log("\n💾 Add to .env:");
+  console.log(`BASE_SEPOLIA_SAND_TOKEN_ADDRESS=${mockSandAddress}`);
+  console.log(`BASE_SEPOLIA_GATEWAY_ADDRESS=${gatewayAddress}`);
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error("❌ Test failed:", error);
+    process.exit(1);
+  });
