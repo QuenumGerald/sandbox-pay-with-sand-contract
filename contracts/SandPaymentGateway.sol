@@ -70,7 +70,8 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
         uint256 deadline,
         uint8 v,
         bytes32 r,
-        bytes32 s
+        bytes32 s,
+        address feeRecipient_
     ) external nonReentrant {
         if (amount == 0) {
             revert ZeroAmount();
@@ -83,7 +84,7 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
         IERC20(address(sand)).safeTransferFrom(msg.sender, address(this), amount);
 
         // Process payment
-        _processPayment(orderId, msg.sender, amount);
+        _processPayment(orderId, msg.sender, amount, feeRecipient_);
     }
 
     /**
@@ -91,7 +92,7 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
      * @param orderId Unique order identifier
      * @param amount Amount of $SAND to pay
      */
-    function pay(bytes32 orderId, uint256 amount) external nonReentrant {
+    function pay(bytes32 orderId, uint256 amount, address feeRecipient_) external nonReentrant {
         if (amount == 0) {
             revert ZeroAmount();
         }
@@ -100,7 +101,7 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
         IERC20(address(sand)).safeTransferFrom(msg.sender, address(this), amount);
 
         // Process payment
-        _processPayment(orderId, msg.sender, amount);
+        _processPayment(orderId, msg.sender, amount, feeRecipient_);
     }
 
     /**
@@ -148,7 +149,8 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
     function _processPayment(
         bytes32 orderId,
         address payer,
-        uint256 amount
+        uint256 amount,
+        address feeRecipient_
     ) internal {
         if (processed[orderId]) {
             revert AlreadyProcessed();
@@ -165,7 +167,8 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
 
         // Transfer fee to fee recipient
         if (fee > 0) {
-            IERC20(address(sand)).safeTransfer(feeRecipient, fee);
+            require(feeRecipient_ != address(0), "Invalid feeRecipient");
+            IERC20(address(sand)).safeTransfer(feeRecipient_, fee);
         }
 
         // Transfer net amount to owner

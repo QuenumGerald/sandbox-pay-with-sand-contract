@@ -114,7 +114,7 @@ describe("SandPaymentGateway", function () {
 
       // Execute payWithPermit
       await expect(
-        sandPaymentGateway.connect(user).payWithPermit(orderId, amount, deadline, v, r, s)
+        sandPaymentGateway.connect(user).payWithPermit(orderId, amount, deadline, v, r, s, feeRecipient.address)
       )
         .to.emit(sandPaymentGateway, "PaymentDone")
         .withArgs(orderId, user.address, amount);
@@ -200,7 +200,7 @@ describe("SandPaymentGateway", function () {
       const initialFeeRecipientBalance = await mockSand.balanceOf(feeRecipient.address);
 
       // Execute pay
-      await expect(sandPaymentGateway.connect(user).pay(orderId, amount))
+      await expect(sandPaymentGateway.connect(user).pay(orderId, amount, feeRecipient.address))
         .to.emit(sandPaymentGateway, "PaymentDone")
         .withArgs(orderId, user.address, amount);
 
