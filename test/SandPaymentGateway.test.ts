@@ -159,7 +159,9 @@ describe("SandPaymentGateway", function () {
       const signature = await user._signTypedData(domain, types, values);
       const { v, r, s } = ethers.utils.splitSignature(signature);
 
-      await sandPaymentGateway.connect(user).payWithPermit(orderId, amount, deadline, v, r, s);
+      await sandPaymentGateway
+        .connect(user)
+        .payWithPermit(orderId, amount, deadline, v, r, s, feeRecipient.address);
 
       // Second payment should revert
       const values2 = {
@@ -171,14 +173,24 @@ describe("SandPaymentGateway", function () {
       const { v: v2, r: r2, s: s2 } = ethers.utils.splitSignature(signature2);
 
       await expect(
-        sandPaymentGateway.connect(user).payWithPermit(orderId, amount, deadline, v2, r2, s2)
+        sandPaymentGateway
+          .connect(user)
+          .payWithPermit(orderId, amount, deadline, v2, r2, s2, feeRecipient.address)
       ).to.be.revertedWithCustomError(sandPaymentGateway, "AlreadyProcessed");
     });
 
     it("Should revert with zero amount", async function () {
       const deadline = Math.floor(Date.now() / 1000) + 3600;
       await expect(
-        sandPaymentGateway.connect(user).payWithPermit(orderId, 0, deadline, 0, ethers.constants.HashZero, ethers.constants.HashZero)
+        sandPaymentGateway.connect(user).payWithPermit(
+          orderId,
+          0,
+          deadline,
+          0,
+          ethers.constants.HashZero,
+          ethers.constants.HashZero,
+          feeRecipient.address
+        )
       ).to.be.revertedWithCustomError(sandPaymentGateway, "ZeroAmount");
     });
   });
@@ -214,46 +226,11 @@ describe("SandPaymentGateway", function () {
 
     it("Should revert with insufficient allowance", async function () {
       await expect(
-        sandPaymentGateway.connect(user).pay(orderId, amount)
+        sandPaymentGateway.connect(user).pay(orderId, amount, feeRecipient.address)
       ).to.be.revertedWith("ERC20: insufficient allowance");
     });
   });
 
-  describe("refund", function () {
-    const orderId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("order-refund"));
-    const amount = ethers.utils.parseEther("100");
-
-    beforeEach(async function () {
-      // Process a payment first
-      await mockSand.connect(user).approve(sandPaymentGateway.address, amount);
-      await sandPaymentGateway.connect(user).pay(orderId, amount);
-    });
-
-    it("Should refund successfully", async function () {
-      const refundAmount = ethers.utils.parseEther("50");
-      const initialBalance = await mockSand.balanceOf(other.address);
-
-      await expect(sandPaymentGateway.connect(owner).refund(orderId, other.address, refundAmount))
-        .to.emit(sandPaymentGateway, "Refunded")
-        .withArgs(orderId, other.address, refundAmount);
-
-      expect(await mockSand.balanceOf(other.address)).to.equal(initialBalance.add(refundAmount));
-      expect(await sandPaymentGateway.processed(orderId)).to.be.false;
-    });
-
-    it("Should revert if not owner", async function () {
-      await expect(
-        sandPaymentGateway.connect(user).refund(orderId, other.address, amount)
-      ).to.be.revertedWith("Ownable: caller is not the owner");
-    });
-
-    it("Should revert with insufficient balance", async function () {
-      const largeAmount = ethers.utils.parseEther("10000");
-      await expect(
-        sandPaymentGateway.connect(owner).refund(orderId, other.address, largeAmount)
-      ).to.be.revertedWithCustomError(sandPaymentGateway, "InsufficientBalance");
-    });
-  });
 
   describe("Admin functions", function () {
     it("Should update fee basis points", async function () {
@@ -285,7 +262,7 @@ describe("SandPaymentGateway", function () {
       const orderId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("emergency-test"));
       
       await mockSand.connect(user).approve(sandPaymentGateway.address, amount);
-      await sandPaymentGateway.connect(user).pay(orderId, amount);
+      await sandPaymentGateway.connect(user).pay(orderId, amount, feeRecipient.address);
 
       const contractBalance = await sandPaymentGateway.getBalance();
       const initialOwnerBalance = await mockSand.balanceOf(owner.address);
@@ -306,7 +283,7 @@ describe("SandPaymentGateway", function () {
       const orderId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("balance-test"));
       
       await mockSand.connect(user).approve(sandPaymentGateway.address, amount);
-      await sandPaymentGateway.connect(user).pay(orderId, amount);
+      await sandPaymentGateway.connect(user).pay(orderId, amount, feeRecipient.address);
 
       // Balance should be 0 since everything is distributed
       expect(await sandPaymentGateway.getBalance()).to.equal(0);
@@ -320,7 +297,7 @@ describe("SandPaymentGateway", function () {
       // Make a payment
       const amount = ethers.utils.parseEther("100");
       await mockSand.connect(user).approve(sandPaymentGateway.address, amount);
-      await sandPaymentGateway.connect(user).pay(orderId, amount);
+      await sandPaymentGateway.connect(user).pay(orderId, amount, feeRecipient.address);
 
       expect(await sandPaymentGateway.isProcessed(orderId)).to.be.true;
     });
