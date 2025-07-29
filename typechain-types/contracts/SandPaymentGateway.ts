@@ -73,7 +73,7 @@ export interface SandPaymentGatewayInterface extends Interface {
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "pay",
-    values: [BytesLike, BigNumberish]
+    values: [BytesLike, BigNumberish, AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "payWithPermit",
@@ -83,7 +83,8 @@ export interface SandPaymentGatewayInterface extends Interface {
       BigNumberish,
       BigNumberish,
       BytesLike,
-      BytesLike
+      BytesLike,
+      AddressLike
     ]
   ): string;
   encodeFunctionData(
@@ -263,7 +264,7 @@ export interface SandPaymentGateway extends BaseContract {
   owner: TypedContractMethod<[], [string], "view">;
 
   pay: TypedContractMethod<
-    [orderId: BytesLike, amount: BigNumberish],
+    [orderId: BytesLike, amount: BigNumberish, feeRecipient_: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -275,7 +276,8 @@ export interface SandPaymentGateway extends BaseContract {
       deadline: BigNumberish,
       v: BigNumberish,
       r: BytesLike,
-      s: BytesLike
+      s: BytesLike,
+      feeRecipient_: AddressLike
     ],
     [void],
     "nonpayable"
@@ -330,7 +332,7 @@ export interface SandPaymentGateway extends BaseContract {
   getFunction(
     nameOrSignature: "pay"
   ): TypedContractMethod<
-    [orderId: BytesLike, amount: BigNumberish],
+    [orderId: BytesLike, amount: BigNumberish, feeRecipient_: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -343,7 +345,8 @@ export interface SandPaymentGateway extends BaseContract {
       deadline: BigNumberish,
       v: BigNumberish,
       r: BytesLike,
-      s: BytesLike
+      s: BytesLike,
+      feeRecipient_: AddressLike
     ],
     [void],
     "nonpayable"
