@@ -8,7 +8,7 @@ async function main() {
   const deployer = signers[0];
   const user = signers[1] || signers[0]; // Use deployer as user if only one signer
   const feeRecipient = signers[2] || signers[0]; // Use deployer as fee recipient if needed
-  
+
   console.log("Deployer address:", deployer.address);
   console.log("User address:", user.address);
   console.log("Fee recipient:", feeRecipient.address);
@@ -69,41 +69,56 @@ async function main() {
   console.log("✅ User approved", ethers.formatEther(paymentAmount), "mSAND");
 
   // Make payment
-  const tx1 = await sandPaymentGateway.connect(user).pay(orderId1, paymentAmount);
-  const receipt1 = await tx1.wait();
-  console.log("✅ Payment processed, tx hash:", receipt1?.hash);
-
-  // Check event
-  const events = receipt1?.logs?.filter((log: { topics: string[]; data: any; }) => {
-    try {
-      const parsed = sandPaymentGateway.interface.parseLog({
-        topics: log.topics as string[],
-        data: log.data
-      });
-      return parsed?.name === "PaymentDone";
-    } catch {
-      return false;
+  let receipt1;
+  try {
+    const tx1 = await sandPaymentGateway.connect(user).pay(orderId1, paymentAmount);
+    receipt1 = await tx1.wait();
+    console.log("✅ Payment processed, tx hash:", receipt1?.hash);
+  } catch (err: any) {
+    if (err && err.error && err.error.message) {
+      console.error('❌ Payment reverted with reason:', err.error.message);
+    } else if (err && err.message) {
+      console.error('❌ Payment reverted with error:', err.message);
+    } else {
+      console.error('❌ Payment reverted with unknown error:', err);
     }
-  });
+    throw err;
+  }
 
-  if (events && events.length > 0) {
-    const parsed = sandPaymentGateway.interface.parseLog({
-      topics: events[0].topics as string[],
-      data: events[0].data
+  if (receipt1) {
+    // Cherche et parse l'event PaymentDone
+    const eventLog = receipt1.logs.find((log: { topics: string[]; data: any; }) => {
+      try {
+        const parsed = sandPaymentGateway.interface.parseLog({
+          topics: log.topics as string[],
+          data: log.data
+        });
+        return parsed?.name === "PaymentDone";
+      } catch {
+        return false;
+      }
     });
-    console.log("✅ PaymentDone event emitted:");
-    console.log("   - Order ID:", parsed?.args[0]);
-    console.log("   - Payer:", parsed?.args[1]);
-    console.log("   - Amount:", ethers.formatEther(parsed?.args[2]), "mSAND");
+    if (eventLog) {
+      const parsed = sandPaymentGateway.interface.parseLog({
+        topics: eventLog.topics as string[],
+        data: eventLog.data
+      });
+      console.log("✅ PaymentDone event emitted:");
+      console.log("   - Order ID:", parsed?.args[0]);
+      console.log("   - Payer:", parsed?.args[1]);
+      console.log("   - Amount:", ethers.formatEther(parsed?.args[2]), "mSAND");
+    } else {
+      console.error("❌ PaymentDone event not found!");
+    }
   }
 
   console.log("\n🔐 Step 4: Testing Payment with Permit (EIP-2612)");
   console.log("-".repeat(40));
-  
+
   const orderId2 = ethers.keccak256(ethers.toUtf8Bytes("test-order-2"));
   const permitAmount = ethers.parseEther("30"); // 30 tokens (reduced amount)
   const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
-  
+
   // Check user balance before permit
   const userBalanceBefore = await mockSand.balanceOf(user.address);
   console.log("User balance before permit:", ethers.formatEther(userBalanceBefore), "mSAND");
