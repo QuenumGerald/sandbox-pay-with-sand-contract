@@ -77,8 +77,10 @@ bytes32 orderId = ...;
 uint256 amount = 100 ether;
 uint256 deadline = block.timestamp + 1 hours;
 (uint8 v, bytes32 r, bytes32 s) = /* signature from user */;
+address feeRecipient = ...;
 
-sandPaymentGateway.payWithPermit(orderId, amount, deadline, v, r, s);
+// Note: feeRecipient is now required in payWithPermit
+sandPaymentGateway.payWithPermit(orderId, amount, deadline, v, r, s, feeRecipient);
 ```
 
 You can also use the traditional `approve` + `pay` flow:
@@ -86,11 +88,43 @@ You can also use the traditional `approve` + `pay` flow:
 ```solidity
 bytes32 orderId = ...;
 uint256 amount = 50 ether;
+address feeRecipient = ...;
 
 // User approves the gateway to spend tokens
 sandToken.approve(address(sandPaymentGateway), amount);
 
-sandPaymentGateway.pay(orderId, amount);
+// Note: feeRecipient is now required in pay
+sandPaymentGateway.pay(orderId, amount, feeRecipient);
 ```
 
 The gateway distributes the fee and transfers the net amount to the contract owner. Each `orderId` can only be used once.
+
+---
+
+## Base Sepolia Integration Test
+
+A full integration test is available for the Base Sepolia network:
+
+```bash
+npx hardhat run scripts/test-base-sepolia.ts --network baseSepolia
+```
+
+### Important Notes
+- **Do NOT run this script with `ts-node`**: It requires Hardhat's runtime environment (hre.ethers). Always use `npx hardhat run ...`.
+- **Always await approve**: After calling `approve`, always wait for the transaction to be mined before calling `pay`. Example:
+  ```typescript
+  const approveTx = await token.approve(gateway.address, amount);
+  await approveTx.wait();
+  ```
+- **Function signatures**: Both `pay` and `payWithPermit` now require a `feeRecipient` as the last argument.
+- **EIP-2612 permit**: The script demonstrates both traditional and permit-based flows for payment.
+- **Order IDs**: Each orderId must be unique and never reused.
+
+### Troubleshooting
+- **Error: no matching fragment (pay/payWithPermit)**: Check that you are passing all required arguments, especially `feeRecipient`.
+- **Allowance is 0 before pay**: Make sure you wait for the approve transaction to be mined before calling `pay`.
+- **hre.ethers not found**: Only available when running via Hardhat (`npx hardhat run`).
+- **Permit signature invalid**: Ensure the domain, types, and values match your token and network.
+
+---
+
