@@ -9,11 +9,11 @@ async function main() {
   const signers = await hre.ethers.getSigners();
   const deployer = signers[0];
   const user = signers[1] || signers[0]; // Use deployer as user if only one signer
-  const feeRecipient = signers[2] || signers[0]; // Use deployer as fee recipient if needed
+  const recipient = signers[2] || signers[0]; // Use deployer as recipient if needed
 
   console.log("Deployer address:", deployer.address);
   console.log("User address:", user.address);
-  console.log("Fee recipient:", feeRecipient.address);
+  console.log("Recipient:", recipient.address);
 
   // Check balances
   const deployerBalance = await deployer.provider.getBalance(deployer.address);
@@ -49,11 +49,8 @@ async function main() {
 
   // Deploy SandPaymentGateway
   const SandPaymentGateway = await hre.ethers.getContractFactory("SandPaymentGateway");
-  const feeBasisPoints = 100; // 1%
   const sandPaymentGateway = await SandPaymentGateway.deploy(
-    mockSandAddress,
-    feeBasisPoints,
-    feeRecipient.address
+    mockSandAddress
   ) as any;
   await sandPaymentGateway.waitForDeployment();
 
@@ -95,11 +92,11 @@ async function main() {
   console.log("User allowance to gateway:", hre.ethers.formatEther(userAllowance));
   console.log("Contract (gateway) mSAND balance:", hre.ethers.formatEther(contractSandBalance));
   console.log("OrderId1:", orderId1);
-  console.log("FeeRecipient:", feeRecipient.address);
+  console.log("FeeRecipient:", recipient.address);
   // Make payment
   let receipt1;
   try {
-    const tx1 = await sandPaymentGateway.connect(user).pay(orderId1, paymentAmount, feeRecipient.address);
+    const tx1 = await sandPaymentGateway.connect(user).pay(orderId1, paymentAmount, recipient.address);
     receipt1 = await tx1.wait();
     console.log("✅ Payment processed, tx hash:", receipt1?.hash);
   } catch (err: any) {
@@ -190,7 +187,7 @@ async function main() {
     v,
     r,
     s,
-    feeRecipient.address
+    recipient.address
   );
   const receipt2 = await tx2.wait();
   console.log("✅ Permit payment processed, tx hash:", receipt2?.hash);
@@ -200,40 +197,36 @@ async function main() {
 
   const deployerTokenBalance = await mockSand.balanceOf(deployer.address);
   const userTokenBalance = await mockSand.balanceOf(user.address);
-  const feeRecipientBalance = await mockSand.balanceOf(feeRecipient.address);
+  const recipientBalance = await mockSand.balanceOf(recipient.address);
   const contractBalance = await sandPaymentGateway.getBalance();
 
   console.log("Deployer mSAND balance:", hre.ethers.formatEther(deployerTokenBalance));
   console.log("User mSAND balance:", hre.ethers.formatEther(userTokenBalance));
-  console.log("Fee recipient balance:", hre.ethers.formatEther(feeRecipientBalance));
+  console.log("Fee recipient balance:", hre.ethers.formatEther(recipientBalance));
   console.log("Contract balance:", hre.ethers.formatEther(contractBalance));
 
   // Calculate expected values
   const totalPaid = paymentAmount + permitAmount; // 150 tokens
-  const expectedFee = totalPaid * BigInt(feeBasisPoints) / BigInt(10000); // 1.5 tokens
+  const expectedFee = totalPaid * BigInt(0) / BigInt(10000); // 1.5 tokens
   const expectedNet = totalPaid - expectedFee; // 148.5 tokens
 
   console.log("\n📈 Expected vs Actual:");
   console.log("Expected total fee:", hre.ethers.formatEther(expectedFee), "mSAND");
-  console.log("Actual fee recipient balance:", hre.ethers.formatEther(feeRecipientBalance), "mSAND");
+  console.log("Actual fee recipient balance:", hre.ethers.formatEther(recipientBalance), "mSAND");
   console.log("Expected net to deployer:", hre.ethers.formatEther(expectedNet), "mSAND");
 
   console.log("\n🔄 Step 5: Testing Admin Functions");
   console.log("-".repeat(40));
 
-  // Test fee update
-  const newFee = 150; // 1.5%
-  await sandPaymentGateway.connect(deployer).updateFee(newFee);
-  const updatedFee = await sandPaymentGateway.feeBasisPoints();
-  console.log("✅ Fee updated to:", updatedFee.toString(), "basis points");
-  console.log("✅ Admin functions test completed");
+  // No admin fee update logic in new contract
+  console.log("✅ Admin functions test skipped (no fee logic in contract)");
 
   console.log("\n📊 Step 6: Final Balance Check");
   console.log("-".repeat(40));
 
   const finalDeployerTokenBalance = await mockSand.balanceOf(deployer.address);
   const finalUserTokenBalance = await mockSand.balanceOf(user.address);
-  const finalFeeRecipientBalance = await mockSand.balanceOf(feeRecipient.address);
+  const finalFeeRecipientBalance = await mockSand.balanceOf(recipient.address);
   const finalContractBalance = await sandPaymentGateway.getBalance();
 
   console.log("Deployer mSAND balance:", hre.ethers.formatEther(finalDeployerTokenBalance));
@@ -252,7 +245,7 @@ async function main() {
   console.log(`npx hardhat verify --network baseSepolia ${mockSandAddress} "Mock SAND" "mSAND" "${initialSupply.toString()}"`);
 
   console.log("\n2. Verify SandPaymentGateway:");
-  console.log(`npx hardhat verify --network baseSepolia ${gatewayAddress} "${mockSandAddress}" ${feeBasisPoints} "${feeRecipient.address}"`);
+  console.log(`npx hardhat verify --network baseSepolia ${gatewayAddress} "${mockSandAddress}" ${0} "${recipient.address}"`);
 
   console.log("\n🌐 View on Basescan:");
   console.log(`   - Mock SAND: https://sepolia.basescan.org/address/${mockSandAddress}`);

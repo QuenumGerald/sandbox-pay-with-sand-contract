@@ -8,16 +8,15 @@ describe("SandPaymentGateway", function () {
   let sandPaymentGateway: SandPaymentGateway;
   let mockSand: MockERC20Permit;
   let owner: HardhatEthersSigner;
-  let feeRecipient: HardhatEthersSigner;
+  let recipient: HardhatEthersSigner;
   let user: HardhatEthersSigner;
   let other: HardhatEthersSigner;
 
   const INITIAL_SUPPLY = parseEther("1000000");
-  const FEE_BASIS_POINTS = 100; // 1%
-  const MAX_FEE_BASIS_POINTS = 1000; // 10%
+
 
   beforeEach(async function () {
-    [owner, feeRecipient, user, other] = await ethers.getSigners();
+    [owner, recipient, user, other] = await ethers.getSigners();
 
     // Deploy mock $SAND token with permit functionality
     const MockERC20PermitFactory = await ethers.getContractFactory("MockERC20Permit");
@@ -27,9 +26,7 @@ describe("SandPaymentGateway", function () {
     // Deploy SandPaymentGateway
     const SandPaymentGatewayFactory = await ethers.getContractFactory("SandPaymentGateway");
     sandPaymentGateway = (await SandPaymentGatewayFactory.deploy(
-      await mockSand.getAddress(),
-      FEE_BASIS_POINTS,
-      feeRecipient.address
+      await mockSand.getAddress()
     ) as unknown) as SandPaymentGateway;
     await sandPaymentGateway.waitForDeployment();
 
@@ -42,14 +39,6 @@ describe("SandPaymentGateway", function () {
       expect(await sandPaymentGateway.sand()).to.equal(await mockSand.getAddress());
     });
 
-    it("Should set the correct fee basis points", async function () {
-      expect(await sandPaymentGateway.feeBasisPoints()).to.equal(FEE_BASIS_POINTS);
-    });
-
-    it("Should set the correct fee recipient", async function () {
-      expect(await sandPaymentGateway.feeRecipient()).to.equal(feeRecipient.address);
-    });
-
     it("Should set the correct owner", async function () {
       expect(await sandPaymentGateway.owner()).to.equal(owner.address);
     });
@@ -57,15 +46,8 @@ describe("SandPaymentGateway", function () {
     it("Should revert with zero address for sand token", async function () {
       const SandPaymentGatewayFactory = await ethers.getContractFactory("SandPaymentGateway");
       await expect(
-        SandPaymentGatewayFactory.deploy(ZeroAddress, FEE_BASIS_POINTS, feeRecipient.address)
+        SandPaymentGatewayFactory.deploy(ZeroAddress)
       ).to.be.revertedWithCustomError(sandPaymentGateway, "ZeroAddress");
-    });
-
-    it("Should revert with fee basis points > 1000", async function () {
-      const SandPaymentGatewayFactory = await ethers.getContractFactory("SandPaymentGateway");
-      await expect(
-        SandPaymentGatewayFactory.deploy(await mockSand.getAddress(), 1001, feeRecipient.address)
-      ).to.be.revertedWithCustomError(sandPaymentGateway, "InvalidFee");
     });
   });
 
@@ -111,7 +93,7 @@ describe("SandPaymentGateway", function () {
           v,
           r,
           s,
-          feeRecipient.address
+          recipient.address
         )
       ).to.emit(sandPaymentGateway, "PaymentDone").withArgs(orderId, user.address, amount);
     });
@@ -124,7 +106,7 @@ describe("SandPaymentGateway", function () {
     it("Should process payment with approval successfully", async function () {
       await mockSand.connect(user).approve(await sandPaymentGateway.getAddress(), amount);
       await expect(
-        sandPaymentGateway.connect(user).pay(orderId, amount, feeRecipient.address)
+        sandPaymentGateway.connect(user).pay(orderId, amount, recipient.address)
       ).to.emit(sandPaymentGateway, "PaymentDone").withArgs(orderId, user.address, amount);
     });
   });

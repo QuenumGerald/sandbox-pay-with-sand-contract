@@ -17,42 +17,29 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
 
     // State variables
     IERC20Permit public immutable sand;
-    uint16 public feeBasisPoints; // ex. 100 = 1%
-    address public feeRecipient;
+
     mapping(bytes32 => bool) public processed;
 
     // Events
     event PaymentDone(bytes32 indexed orderId, address indexed payer, uint256 amount);
-    event FeeUpdated(uint16 newFeeBasisPoints);
-    event FeeRecipientUpdated(address newFeeRecipient);
+
 
     // Errors
     error AlreadyProcessed();
-    error InvalidFee();
+
     error ZeroAmount();
     error ZeroAddress();
 
     /**
      * @dev Constructor
      * @param _sand Address of the $SAND token contract
-     * @param _feeBasisPoints Fee in basis points (max 1000 = 10%)
-     * @param _feeRecipient Address to receive fees
+     * @param _sand Address of the $SAND token contract
      */
-    constructor(
-        address _sand,
-        uint16 _feeBasisPoints,
-        address _feeRecipient
-    ) Ownable(msg.sender) {
-        if (_sand == address(0) || _feeRecipient == address(0)) {
+    constructor(address _sand) Ownable(msg.sender) {
+        if (_sand == address(0)) {
             revert ZeroAddress();
         }
-        if (_feeBasisPoints > 1000) {
-            revert InvalidFee();
-        }
-
         sand = IERC20Permit(_sand);
-        feeBasisPoints = _feeBasisPoints;
-        feeRecipient = _feeRecipient;
     }
 
     /**
@@ -71,7 +58,7 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
         uint8 v,
         bytes32 r,
         bytes32 s,
-        address feeRecipient_
+        address recipient
     ) external nonReentrant {
         if (amount == 0) {
             revert ZeroAmount();
@@ -84,7 +71,7 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
         IERC20(address(sand)).safeTransferFrom(msg.sender, address(this), amount);
 
         // Process payment
-        _processPayment(orderId, msg.sender, amount, feeRecipient_);
+        _processPayment(orderId, msg.sender, amount, recipient);
     }
 
     /**
@@ -92,7 +79,7 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
      * @param orderId Unique order identifier
      * @param amount Amount of $SAND to pay
      */
-    function pay(bytes32 orderId, uint256 amount, address feeRecipient_) external nonReentrant {
+    function pay(bytes32 orderId, uint256 amount, address recipient) external nonReentrant {
         if (amount == 0) {
             revert ZeroAmount();
         }
@@ -101,33 +88,13 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
         IERC20(address(sand)).safeTransferFrom(msg.sender, address(this), amount);
 
         // Process payment
-        _processPayment(orderId, msg.sender, amount, feeRecipient_);
+        _processPayment(orderId, msg.sender, amount, recipient);
     }
 
     /**
      * @dev Update fee basis points (owner only)
      * @param _feeBasisPoints New fee in basis points (max 1000 = 10%)
      */
-    function updateFee(uint16 _feeBasisPoints) external onlyOwner {
-        if (_feeBasisPoints > 1000) {
-            revert InvalidFee();
-        }
-        feeBasisPoints = _feeBasisPoints;
-        emit FeeUpdated(_feeBasisPoints);
-    }
-
-    /**
-     * @dev Update fee recipient (owner only)
-     * @param _feeRecipient New fee recipient address
-     */
-    function updateFeeRecipient(address _feeRecipient) external onlyOwner {
-        if (_feeRecipient == address(0)) {
-            revert ZeroAddress();
-        }
-        feeRecipient = _feeRecipient;
-        emit FeeRecipientUpdated(_feeRecipient);
-    }
-
     /**
      * @dev Emergency withdraw function (owner only)
      * @param amount Amount to withdraw
@@ -150,7 +117,7 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
         bytes32 orderId,
         address payer,
         uint256 amount,
-        address feeRecipient_
+        address recipient
     ) internal {
         if (processed[orderId]) {
             revert AlreadyProcessed();
@@ -161,20 +128,9 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
 
         // Note: tokens should already be transferred to contract by calling function
         
-        // Calculate fee and net amount
-        uint256 fee = (amount * feeBasisPoints) / 10_000;
-        uint256 net = amount - fee;
-
-        // Transfer fee to fee recipient
-        if (fee > 0) {
-            require(feeRecipient_ != address(0), "Invalid feeRecipient");
-            IERC20(address(sand)).safeTransfer(feeRecipient_, fee);
-        }
-
-        // Transfer net amount to owner
-        if (net > 0) {
-            IERC20(address(sand)).safeTransfer(owner(), net);
-        }
+        // Transfer full amount to recipient
+        require(recipient != address(0), "Invalid recipient");
+        IERC20(address(sand)).safeTransfer(recipient, amount);
 
         // Emit payment event
         emit PaymentDone(orderId, payer, amount);
