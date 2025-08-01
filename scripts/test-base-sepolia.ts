@@ -1,4 +1,5 @@
 import hre from "hardhat";
+import { ethers } from "ethers";
 // Utiliser hre.ethers partout pour compatibilité Hardhat
 
 
@@ -11,13 +12,13 @@ async function main() {
   const user = signers[1] || signers[0]; // Use deployer as user if only one signer
   const recipient = signers[2] || signers[0]; // Use deployer as recipient if needed
 
-  console.log("Deployer address:", deployer.address);
-  console.log("User address:", user.address);
-  console.log("Recipient:", recipient.address);
+  console.log("Deployer address:", await deployer.getAddress());
+  console.log("User address:", await user.getAddress());
+  console.log("Recipient:", await recipient.getAddress());
 
   // Check balances
-  const deployerBalance = await deployer.provider.getBalance(deployer.address);
-  const userBalance = await deployer.provider.getBalance(user.address);
+  const deployerBalance = await deployer.provider.getBalance(await deployer.getAddress());
+  const userBalance = await deployer.provider.getBalance(await user.getAddress());
 
   console.log("Deployer balance:", hre.ethers.formatEther(deployerBalance), "ETH");
   console.log("User balance:", hre.ethers.formatEther(userBalance), "ETH");
@@ -41,7 +42,7 @@ async function main() {
 
   // Transfer some tokens to user for testing
   const userTokens = hre.ethers.parseEther("10000"); // 10k tokens
-  await mockSand.transfer(user.address, userTokens);
+  await mockSand.transfer(await user.getAddress(), userTokens);
   console.log("✅ Transferred", hre.ethers.formatEther(userTokens), "mSAND to user");
 
   console.log("\n🏗️  Step 2: Deploying SandPaymentGateway");
@@ -67,7 +68,7 @@ async function main() {
   // Print all signer addresses and balances
   console.log("--- Signer Diagnostics ---");
   for (let i = 0; i < signers.length; i++) {
-    const addr = signers[i].address;
+    const addr = await signers[i].getAddress();
     const ethBal = await signers[i].provider.getBalance(addr);
     const sandBal = await mockSand.balanceOf(addr);
     console.log(`Signer[${i}] address: ${addr}`);
@@ -84,9 +85,9 @@ async function main() {
   console.log("✅ User approved", hre.ethers.formatEther(paymentAmount), "mSAND");
 
   // Diagnostics before payment
-  const userSandBalance = await mockSand.balanceOf(user.address);
+  const userSandBalance = await mockSand.balanceOf(await user.getAddress());
   const contractSandBalance = await mockSand.balanceOf(gatewayAddress);
-  const userAllowance = await mockSand.allowance(user.address, gatewayAddress);
+  const userAllowance = await mockSand.allowance(await user.getAddress(), gatewayAddress);
   console.log("--- Diagnostics before pay() ---");
   console.log("User mSAND balance:", hre.ethers.formatEther(userSandBalance));
   console.log("User allowance to gateway:", hre.ethers.formatEther(userAllowance));
@@ -167,10 +168,10 @@ async function main() {
   };
 
   const values = {
-    owner: user.address,
+    owner: await user.getAddress(),
     spender: gatewayAddress,
     value: permitAmount,
-    nonce: await mockSand.nonces(user.address),
+    nonce: await mockSand.nonces(await user.getAddress()),
     deadline: deadline,
   };
 
@@ -195,9 +196,9 @@ async function main() {
   console.log("\n📊 Step 5: Checking Final Balances");
   console.log("-".repeat(40));
 
-  const deployerTokenBalance = await mockSand.balanceOf(deployer.address);
-  const userTokenBalance = await mockSand.balanceOf(user.address);
-  const recipientBalance = await mockSand.balanceOf(recipient.address);
+  const deployerTokenBalance = await mockSand.balanceOf(await deployer.getAddress());
+  const userTokenBalance = await mockSand.balanceOf(await user.getAddress());
+  const recipientBalance = await mockSand.balanceOf(await recipient.getAddress());
   const contractBalance = await sandPaymentGateway.getBalance();
 
   console.log("Deployer mSAND balance:", hre.ethers.formatEther(deployerTokenBalance));
@@ -224,9 +225,9 @@ async function main() {
   console.log("\n📊 Step 6: Final Balance Check");
   console.log("-".repeat(40));
 
-  const finalDeployerTokenBalance = await mockSand.balanceOf(deployer.address);
-  const finalUserTokenBalance = await mockSand.balanceOf(user.address);
-  const finalFeeRecipientBalance = await mockSand.balanceOf(recipient.address);
+  const finalDeployerTokenBalance = await mockSand.balanceOf(await deployer.getAddress());
+  const finalUserTokenBalance = await mockSand.balanceOf(await user.getAddress());
+  const finalFeeRecipientBalance = await mockSand.balanceOf(await recipient.getAddress());
   const finalContractBalance = await sandPaymentGateway.getBalance();
 
   console.log("Deployer mSAND balance:", hre.ethers.formatEther(finalDeployerTokenBalance));
