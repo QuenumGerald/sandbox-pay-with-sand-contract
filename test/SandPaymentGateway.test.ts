@@ -84,9 +84,13 @@ describe("SandPaymentGateway", function () {
       const signature = await user.signTypedData(domain, types, value);
       const { v, r, s } = ethers.Signature.from(signature);
 
+      // balances before
+      const recipientBefore = await mockSand.balanceOf(recipient.address);
+      const contractBefore = await mockSand.balanceOf(await sandPaymentGateway.getAddress());
+
       // call payWithPermit
       await expect(
-        await sandPaymentGateway.connect(user).payWithPermit(
+        sandPaymentGateway.connect(user).payWithPermit(
           orderId,
           amount,
           deadline,
@@ -96,6 +100,54 @@ describe("SandPaymentGateway", function () {
           recipient.address
         )
       ).to.emit(sandPaymentGateway, "PaymentDone").withArgs(orderId, user.address, amount);
+
+      // balances after
+      const recipientAfter = await mockSand.balanceOf(recipient.address);
+      const contractAfter = await mockSand.balanceOf(await sandPaymentGateway.getAddress());
+
+      expect(recipientAfter - recipientBefore).to.equal(amount);
+      expect(contractAfter).to.equal(0n);
+    });
+
+    it("Should revert for invalid recipient (zero address)", async function () {
+      const deadline = Math.floor(Date.now() / 1000) + 3600;
+      const chainId = await user.provider!.getNetwork().then(n => n.chainId);
+      const domain = {
+        name: await mockSand.name(),
+        version: "1",
+        chainId,
+        verifyingContract: await mockSand.getAddress(),
+      };
+      const types = {
+        Permit: [
+          { name: "owner", type: "address" },
+          { name: "spender", type: "address" },
+          { name: "value", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+        ],
+      };
+      const value = {
+        owner: user.address,
+        spender: await sandPaymentGateway.getAddress(),
+        value: amount,
+        nonce: await mockSand.nonces(user.address),
+        deadline,
+      };
+      const signature = await user.signTypedData(domain, types, value);
+      const { v, r, s } = ethers.Signature.from(signature);
+
+      await expect(
+        sandPaymentGateway.connect(user).payWithPermit(
+          orderId,
+          amount,
+          deadline,
+          v,
+          r,
+          s,
+          ZeroAddress
+        )
+      ).to.be.revertedWith("Invalid recipient");
     });
   });
 
@@ -105,9 +157,40 @@ describe("SandPaymentGateway", function () {
 
     it("Should process payment with approval successfully", async function () {
       await mockSand.connect(user).approve(await sandPaymentGateway.getAddress(), amount);
+
+      const recipientBefore = await mockSand.balanceOf(recipient.address);
+      const contractBefore = await mockSand.balanceOf(await sandPaymentGateway.getAddress());
+
       await expect(
         sandPaymentGateway.connect(user).pay(orderId, amount, recipient.address)
       ).to.emit(sandPaymentGateway, "PaymentDone").withArgs(orderId, user.address, amount);
+
+      const recipientAfter = await mockSand.balanceOf(recipient.address);
+      const contractAfter = await mockSand.balanceOf(await sandPaymentGateway.getAddress());
+
+      expect(recipientAfter - recipientBefore).to.equal(amount);
+      expect(contractAfter).to.equal(0n);
+    });
+
+    it("Should revert on duplicate orderId", async function () {
+      await mockSand.connect(user).approve(await sandPaymentGateway.getAddress(), amount);
+      await sandPaymentGateway.connect(user).pay(orderId, amount, recipient.address);
+      await expect(
+        sandPaymentGateway.connect(user).pay(orderId, amount, recipient.address)
+      ).to.be.revertedWithCustomError(sandPaymentGateway, "AlreadyProcessed");
+    });
+
+    it("Should revert on zero amount", async function () {
+      await expect(
+        sandPaymentGateway.connect(user).pay(orderId, 0n, recipient.address)
+      ).to.be.revertedWithCustomError(sandPaymentGateway, "ZeroAmount");
+    });
+
+    it("Should revert for invalid recipient (zero address)", async function () {
+      await mockSand.connect(user).approve(await sandPaymentGateway.getAddress(), amount);
+      await expect(
+        sandPaymentGateway.connect(user).pay(orderId, amount, ZeroAddress)
+      ).to.be.revertedWith("Invalid recipient");
     });
   });
 });

@@ -63,12 +63,18 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
         if (amount == 0) {
             revert ZeroAmount();
         }
+        require(recipient != address(0), "Invalid recipient");
+
+        // Prevent duplicate processing before any state changes or token transfers
+        if (processed[orderId]) {
+            revert AlreadyProcessed();
+        }
 
         // Execute permit
         sand.permit(msg.sender, address(this), amount, deadline, v, r, s);
-        
-        // Transfer tokens from user to contract
-        IERC20(address(sand)).safeTransferFrom(msg.sender, address(this), amount);
+
+        // Transfer tokens directly from user to recipient
+        IERC20(address(sand)).safeTransferFrom(msg.sender, recipient, amount);
 
         // Process payment
         _processPayment(orderId, msg.sender, amount, recipient);
@@ -84,27 +90,18 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
             revert ZeroAmount();
         }
 
-        // Transfer tokens from user to contract
-        IERC20(address(sand)).safeTransferFrom(msg.sender, address(this), amount);
+        require(recipient != address(0), "Invalid recipient");
+
+        // Prevent duplicate processing before any token transfers
+        if (processed[orderId]) {
+            revert AlreadyProcessed();
+        }
+
+        // Transfer tokens directly from user to recipient
+        IERC20(address(sand)).safeTransferFrom(msg.sender, recipient, amount);
 
         // Process payment
         _processPayment(orderId, msg.sender, amount, recipient);
-    }
-
-    /**
-     * @dev Update fee basis points (owner only)
-     * @param _feeBasisPoints New fee in basis points (max 1000 = 10%)
-     */
-    /**
-     * @dev Emergency withdraw function (owner only)
-     * @param amount Amount to withdraw
-     */
-    function emergencyWithdraw(uint256 amount) external onlyOwner {
-        if (amount == 0) {
-            revert ZeroAmount();
-        }
-        // Transfer available balance (will revert if insufficient)
-        IERC20(address(sand)).safeTransfer(owner(), amount);
     }
 
     /**
@@ -117,7 +114,7 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
         bytes32 orderId,
         address payer,
         uint256 amount,
-        address recipient
+        address /*recipient*/
     ) internal {
         if (processed[orderId]) {
             revert AlreadyProcessed();
@@ -126,22 +123,10 @@ contract SandPaymentGateway is ReentrancyGuard, Ownable {
         // Mark as processed
         processed[orderId] = true;
 
-        // Note: tokens should already be transferred to contract by calling function
-        
-        // Transfer full amount to recipient
-        require(recipient != address(0), "Invalid recipient");
-        IERC20(address(sand)).safeTransfer(recipient, amount);
+        // Note: tokens were transferred directly to the recipient by the calling function
 
         // Emit payment event
         emit PaymentDone(orderId, payer, amount);
-    }
-
-    /**
-     * @dev Get contract balance
-     * @return Current $SAND balance of the contract
-     */
-    function getBalance() external view returns (uint256) {
-        return IERC20(address(sand)).balanceOf(address(this));
     }
 
     /**

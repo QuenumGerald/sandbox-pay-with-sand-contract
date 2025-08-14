@@ -26,8 +26,6 @@ import type {
 export interface SandPaymentGatewayInterface extends Interface {
   getFunction(
     nameOrSignature:
-      | "emergencyWithdraw"
-      | "getBalance"
       | "isProcessed"
       | "owner"
       | "pay"
@@ -42,14 +40,6 @@ export interface SandPaymentGatewayInterface extends Interface {
     nameOrSignatureOrTopic: "OwnershipTransferred" | "PaymentDone"
   ): EventFragment;
 
-  encodeFunctionData(
-    functionFragment: "emergencyWithdraw",
-    values: [BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getBalance",
-    values?: undefined
-  ): string;
   encodeFunctionData(
     functionFragment: "isProcessed",
     values: [BytesLike]
@@ -85,11 +75,6 @@ export interface SandPaymentGatewayInterface extends Interface {
     values: [AddressLike]
   ): string;
 
-  decodeFunctionResult(
-    functionFragment: "emergencyWithdraw",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(functionFragment: "getBalance", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "isProcessed",
     data: BytesLike
@@ -186,14 +171,6 @@ export interface SandPaymentGateway extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
-  emergencyWithdraw: TypedContractMethod<
-    [amount: BigNumberish],
-    [void],
-    "nonpayable"
-  >;
-
-  getBalance: TypedContractMethod<[], [bigint], "view">;
-
   isProcessed: TypedContractMethod<[orderId: BytesLike], [boolean], "view">;
 
   owner: TypedContractMethod<[], [string], "view">;
@@ -234,12 +211,6 @@ export interface SandPaymentGateway extends BaseContract {
     key: string | FunctionFragment
   ): T;
 
-  getFunction(
-    nameOrSignature: "emergencyWithdraw"
-  ): TypedContractMethod<[amount: BigNumberish], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "getBalance"
-  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "isProcessed"
   ): TypedContractMethod<[orderId: BytesLike], [boolean], "view">;
