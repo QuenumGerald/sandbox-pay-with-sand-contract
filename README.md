@@ -4,46 +4,37 @@ This repository contains a Hardhat project with a single Solidity contract `Sand
 
 ## Features
 
-- Accept payments with or without a permit signature
-- Configurable fee percentage and fee recipient
-- Tracks processed order IDs to avoid duplicates
-- Owner can withdraw tokens held by the gateway
+- Accept payments with or without a permit signature (EIP‑2612)
+- Direct token transfer from payer to a specified `recipient`
+- Tracks processed order IDs to prevent duplicates
+- Non-reentrant payment functions for safety
 
 ## Contract summary
 
-`SandPaymentGateway` lets users pay an order by transferring tokens to the contract. The owner receives the net amount and a configurable percentage fee is forwarded to a dedicated fee recipient. Each order ID can be processed only once.
+`SandPaymentGateway` lets users pay an order by transferring tokens directly from the payer to a specified `recipient`. The contract does not hold fees nor manage fee recipients. Each order ID can be processed only once and is tracked to prevent duplicates.
 
 ### State variables
 
 | Variable | Description |
 |----------|-------------|
 | `sand` | Address of the $SAND token implementing `IERC20Permit` |
-| `feeBasisPoints` | Fee percentage in basis points (1% = 100) |
-| `feeRecipient` | Address receiving collected fees |
 | `processed` | Mapping of processed order IDs |
 
 ### Key functions
 
 | Function | Description |
 |----------|-------------|
-| `payWithPermit(orderId, amount, deadline, v, r, s)` | Pay using an off‑chain permit signature. |
-| `pay(orderId, amount)` | Pay using a standard `approve` + `pay` sequence. |
-| `updateFee(_feeBasisPoints)` | Owner‑only function to change the fee (max 10%). |
-| `updateFeeRecipient(_feeRecipient)` | Owner‑only function to change where fees are sent. |
-| `emergencyWithdraw(amount)` | Owner‑only function to withdraw tokens from the contract. |
-| `getBalance()` | View the current token balance held by the gateway. |
+| `payWithPermit(orderId, amount, deadline, v, r, s, recipient)` | Pay using an off‑chain permit signature (EIP‑2612) and transfer tokens directly to `recipient`. |
+| `pay(orderId, amount, recipient)` | Pay using a standard `approve` + `pay` sequence and transfer tokens directly to `recipient`. |
 | `isProcessed(orderId)` | Check whether an order has already been processed. |
 
 ### Events
 
 - `PaymentDone(bytes32 orderId, address payer, uint256 amount)` – emitted for each successful payment.
-- `FeeUpdated(uint16 newFeeBasisPoints)` – emitted when the owner updates the fee.
-- `FeeRecipientUpdated(address newFeeRecipient)` – emitted when the owner updates the fee recipient.
 
 ### Errors
 
 - `AlreadyProcessed` – the order ID has already been paid.
-- `InvalidFee` – the fee exceeds the allowed limit.
 - `ZeroAmount` – the payment or withdrawal amount is zero.
 - `ZeroAddress` – an address parameter is the zero address.
 
@@ -77,10 +68,10 @@ bytes32 orderId = ...;
 uint256 amount = 100 ether;
 uint256 deadline = block.timestamp + 1 hours;
 (uint8 v, bytes32 r, bytes32 s) = /* signature from user */;
-address feeRecipient = ...;
+address recipient = ...;
 
-// Note: feeRecipient is now required in payWithPermit
-sandPaymentGateway.payWithPermit(orderId, amount, deadline, v, r, s, feeRecipient);
+// Provide the address that should receive the tokens directly
+sandPaymentGateway.payWithPermit(orderId, amount, deadline, v, r, s, recipient);
 ```
 
 You can also use the traditional `approve` + `pay` flow:
@@ -88,16 +79,16 @@ You can also use the traditional `approve` + `pay` flow:
 ```solidity
 bytes32 orderId = ...;
 uint256 amount = 50 ether;
-address feeRecipient = ...;
+address recipient = ...;
 
 // User approves the gateway to spend tokens
 sandToken.approve(address(sandPaymentGateway), amount);
 
-// Note: feeRecipient is now required in pay
-sandPaymentGateway.pay(orderId, amount, feeRecipient);
+// Provide the address that should receive the tokens directly
+sandPaymentGateway.pay(orderId, amount, recipient);
 ```
 
-The gateway distributes the fee and transfers the net amount to the contract owner. Each `orderId` can only be used once.
+Tokens are transferred directly to the specified `recipient`. The contract emits `PaymentDone` and marks the `orderId` as processed. No funds remain in the gateway contract. Each `orderId` can only be used once.
 
 ---
 
@@ -116,15 +107,14 @@ npx hardhat run scripts/test-base-sepolia.ts --network baseSepolia
   const approveTx = await token.approve(gateway.address, amount);
   await approveTx.wait();
   ```
-- **Function signatures**: Both `pay` and `payWithPermit` now require a `feeRecipient` as the last argument.
+- **Function signatures**: Both `pay` and `payWithPermit` require a `recipient` as the last argument.
 - **EIP-2612 permit**: The script demonstrates both traditional and permit-based flows for payment.
 - **Order IDs**: Each orderId must be unique and never reused.
 
 ### Troubleshooting
-- **Error: no matching fragment (pay/payWithPermit)**: Check that you are passing all required arguments, especially `feeRecipient`.
+- **Error: no matching fragment (pay/payWithPermit)**: Check that you are passing all required arguments, especially `recipient`.
 - **Allowance is 0 before pay**: Make sure you wait for the approve transaction to be mined before calling `pay`.
 - **hre.ethers not found**: Only available when running via Hardhat (`npx hardhat run`).
 - **Permit signature invalid**: Ensure the domain, types, and values match your token and network.
 
 ---
-
