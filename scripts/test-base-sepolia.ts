@@ -70,9 +70,15 @@ async function main() {
   for (let i = 0; i < signers.length; i++) {
     const addr = await signers[i].getAddress();
     const ethBal = await signers[i].provider.getBalance(addr);
-    const sandBal = await mockSand.balanceOf(addr);
+    let sandBalStr = "(unavailable)";
+    try {
+      const sandBal = await mockSand.balanceOf(addr);
+      sandBalStr = hre.ethers.formatEther(sandBal);
+    } catch (e) {
+      sandBalStr = `(error reading balance: ${String((e as any)?.shortMessage || (e as any)?.message || e)})`;
+    }
     console.log(`Signer[${i}] address: ${addr}`);
-    console.log(`  ETH: ${hre.ethers.formatEther(ethBal)}, mSAND: ${hre.ethers.formatEther(sandBal)}`);
+    console.log(`  ETH: ${hre.ethers.formatEther(ethBal)}, mSAND: ${sandBalStr}`);
   }
   // Approve tokens
   const approveTx = await mockSand.connect(user).approve(gatewayAddress, paymentAmount);
@@ -84,13 +90,56 @@ async function main() {
   }
   console.log("✅ User approved", hre.ethers.formatEther(paymentAmount), "mSAND");
 
+  // Additional diagnostics to ensure spender/owner/amount are correct
+  console.log("--- Post-approve Diagnostics ---");
+  console.log("Token:", mockSandAddress);
+  console.log("Gateway (spender):", gatewayAddress);
+  console.log("Owner (user):", await user.getAddress());
+  try {
+    const approvalLog = approveReceipt.logs.find((log: any) => {
+      try {
+        const parsed = mockSand.interface.parseLog({ topics: log.topics as string[], data: log.data });
+        return parsed?.name === "Approval";
+      } catch {
+        return false;
+      }
+    });
+    if (approvalLog) {
+      const parsed = mockSand.interface.parseLog({ topics: approvalLog.topics as string[], data: approvalLog.data });
+      console.log("Approval event:");
+      console.log("  owner:", parsed.args[0]);
+      console.log("  spender:", parsed.args[1]);
+      console.log("  value:", hre.ethers.formatEther(parsed.args[2]));
+    } else {
+      console.log("No Approval event found in receipt logs");
+    }
+  } catch (e) {
+    console.log("(Skipped Approval event parsing)", e);
+  }
+
+  // Some RPCs may lag state immediately after receipt on L2 testnets.
+  // Poll allowance until it reflects the approved amount or timeout.
+  const ownerAddr = await user.getAddress();
+  const spenderAddr = gatewayAddress;
+  const expectedAllowance = paymentAmount;
+  let polledAllowance = 0n;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    polledAllowance = await mockSand.allowance(ownerAddr, spenderAddr);
+    if (polledAllowance >= expectedAllowance) break;
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
   // Diagnostics before payment
-  const userSandBalance = await mockSand.balanceOf(await user.getAddress());
+  const userSandBalance = await mockSand.balanceOf(ownerAddr);
   const contractSandBalance = await mockSand.balanceOf(gatewayAddress);
-  const userAllowance = await mockSand.allowance(await user.getAddress(), gatewayAddress);
+  const userAllowance = await mockSand.allowance(ownerAddr, gatewayAddress);
   console.log("--- Diagnostics before pay() ---");
   console.log("User mSAND balance:", hre.ethers.formatEther(userSandBalance));
   console.log("User allowance to gateway:", hre.ethers.formatEther(userAllowance));
+  if (userAllowance < expectedAllowance) {
+    console.log("(Note) Polled allowance:", hre.ethers.formatEther(polledAllowance));
+    console.log("(Note) Expected allowance:", hre.ethers.formatEther(expectedAllowance));
+  }
   console.log("Contract (gateway) mSAND balance:", hre.ethers.formatEther(contractSandBalance));
   console.log("OrderId1:", orderId1);
   console.log("FeeRecipient:", recipient.address);
@@ -199,7 +248,7 @@ async function main() {
   const deployerTokenBalance = await mockSand.balanceOf(await deployer.getAddress());
   const userTokenBalance = await mockSand.balanceOf(await user.getAddress());
   const recipientBalance = await mockSand.balanceOf(await recipient.getAddress());
-  const contractBalance = await sandPaymentGateway.getBalance();
+  const contractBalance = await mockSand.balanceOf(gatewayAddress);
 
   console.log("Deployer mSAND balance:", hre.ethers.formatEther(deployerTokenBalance));
   console.log("User mSAND balance:", hre.ethers.formatEther(userTokenBalance));
@@ -228,7 +277,7 @@ async function main() {
   const finalDeployerTokenBalance = await mockSand.balanceOf(await deployer.getAddress());
   const finalUserTokenBalance = await mockSand.balanceOf(await user.getAddress());
   const finalFeeRecipientBalance = await mockSand.balanceOf(await recipient.getAddress());
-  const finalContractBalance = await sandPaymentGateway.getBalance();
+  const finalContractBalance = await mockSand.balanceOf(gatewayAddress);
 
   console.log("Deployer mSAND balance:", hre.ethers.formatEther(finalDeployerTokenBalance));
   console.log("User mSAND balance:", hre.ethers.formatEther(finalUserTokenBalance));
@@ -246,7 +295,7 @@ async function main() {
   console.log(`npx hardhat verify --network baseSepolia ${mockSandAddress} "Mock SAND" "mSAND" "${initialSupply.toString()}"`);
 
   console.log("\n2. Verify SandPaymentGateway:");
-  console.log(`npx hardhat verify --network baseSepolia ${gatewayAddress} "${mockSandAddress}" ${0} "${recipient.address}"`);
+  console.log(`npx hardhat verify --network baseSepolia ${gatewayAddress} "${mockSandAddress}"`);
 
   console.log("\n🌐 View on Basescan:");
   console.log(`   - Mock SAND: https://sepolia.basescan.org/address/${mockSandAddress}`);
