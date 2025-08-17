@@ -26,10 +26,6 @@ import type {
 export interface SandPaymentGatewayInterface extends Interface {
   getFunction(
     nameOrSignature:
-      | "emergencyWithdraw"
-      | "feeBasisPoints"
-      | "feeRecipient"
-      | "getBalance"
       | "isProcessed"
       | "owner"
       | "pay"
@@ -38,34 +34,12 @@ export interface SandPaymentGatewayInterface extends Interface {
       | "renounceOwnership"
       | "sand"
       | "transferOwnership"
-      | "updateFee"
-      | "updateFeeRecipient"
   ): FunctionFragment;
 
   getEvent(
-    nameOrSignatureOrTopic:
-      | "FeeRecipientUpdated"
-      | "FeeUpdated"
-      | "OwnershipTransferred"
-      | "PaymentDone"
+    nameOrSignatureOrTopic: "OwnershipTransferred" | "PaymentDone"
   ): EventFragment;
 
-  encodeFunctionData(
-    functionFragment: "emergencyWithdraw",
-    values: [BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "feeBasisPoints",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "feeRecipient",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getBalance",
-    values?: undefined
-  ): string;
   encodeFunctionData(
     functionFragment: "isProcessed",
     values: [BytesLike]
@@ -73,7 +47,7 @@ export interface SandPaymentGatewayInterface extends Interface {
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "pay",
-    values: [BytesLike, BigNumberish]
+    values: [BytesLike, BigNumberish, AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "payWithPermit",
@@ -83,7 +57,8 @@ export interface SandPaymentGatewayInterface extends Interface {
       BigNumberish,
       BigNumberish,
       BytesLike,
-      BytesLike
+      BytesLike,
+      AddressLike
     ]
   ): string;
   encodeFunctionData(
@@ -99,28 +74,7 @@ export interface SandPaymentGatewayInterface extends Interface {
     functionFragment: "transferOwnership",
     values: [AddressLike]
   ): string;
-  encodeFunctionData(
-    functionFragment: "updateFee",
-    values: [BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "updateFeeRecipient",
-    values: [AddressLike]
-  ): string;
 
-  decodeFunctionResult(
-    functionFragment: "emergencyWithdraw",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "feeBasisPoints",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "feeRecipient",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(functionFragment: "getBalance", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "isProcessed",
     data: BytesLike
@@ -141,35 +95,6 @@ export interface SandPaymentGatewayInterface extends Interface {
     functionFragment: "transferOwnership",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "updateFee", data: BytesLike): Result;
-  decodeFunctionResult(
-    functionFragment: "updateFeeRecipient",
-    data: BytesLike
-  ): Result;
-}
-
-export namespace FeeRecipientUpdatedEvent {
-  export type InputTuple = [newFeeRecipient: AddressLike];
-  export type OutputTuple = [newFeeRecipient: string];
-  export interface OutputObject {
-    newFeeRecipient: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace FeeUpdatedEvent {
-  export type InputTuple = [newFeeBasisPoints: BigNumberish];
-  export type OutputTuple = [newFeeBasisPoints: bigint];
-  export interface OutputObject {
-    newFeeBasisPoints: bigint;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace OwnershipTransferredEvent {
@@ -246,24 +171,12 @@ export interface SandPaymentGateway extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
-  emergencyWithdraw: TypedContractMethod<
-    [amount: BigNumberish],
-    [void],
-    "nonpayable"
-  >;
-
-  feeBasisPoints: TypedContractMethod<[], [bigint], "view">;
-
-  feeRecipient: TypedContractMethod<[], [string], "view">;
-
-  getBalance: TypedContractMethod<[], [bigint], "view">;
-
   isProcessed: TypedContractMethod<[orderId: BytesLike], [boolean], "view">;
 
   owner: TypedContractMethod<[], [string], "view">;
 
   pay: TypedContractMethod<
-    [orderId: BytesLike, amount: BigNumberish],
+    [orderId: BytesLike, amount: BigNumberish, recipient: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -275,7 +188,8 @@ export interface SandPaymentGateway extends BaseContract {
       deadline: BigNumberish,
       v: BigNumberish,
       r: BytesLike,
-      s: BytesLike
+      s: BytesLike,
+      recipient: AddressLike
     ],
     [void],
     "nonpayable"
@@ -293,34 +207,10 @@ export interface SandPaymentGateway extends BaseContract {
     "nonpayable"
   >;
 
-  updateFee: TypedContractMethod<
-    [_feeBasisPoints: BigNumberish],
-    [void],
-    "nonpayable"
-  >;
-
-  updateFeeRecipient: TypedContractMethod<
-    [_feeRecipient: AddressLike],
-    [void],
-    "nonpayable"
-  >;
-
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
 
-  getFunction(
-    nameOrSignature: "emergencyWithdraw"
-  ): TypedContractMethod<[amount: BigNumberish], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "feeBasisPoints"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "feeRecipient"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "getBalance"
-  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "isProcessed"
   ): TypedContractMethod<[orderId: BytesLike], [boolean], "view">;
@@ -330,7 +220,7 @@ export interface SandPaymentGateway extends BaseContract {
   getFunction(
     nameOrSignature: "pay"
   ): TypedContractMethod<
-    [orderId: BytesLike, amount: BigNumberish],
+    [orderId: BytesLike, amount: BigNumberish, recipient: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -343,7 +233,8 @@ export interface SandPaymentGateway extends BaseContract {
       deadline: BigNumberish,
       v: BigNumberish,
       r: BytesLike,
-      s: BytesLike
+      s: BytesLike,
+      recipient: AddressLike
     ],
     [void],
     "nonpayable"
@@ -360,27 +251,7 @@ export interface SandPaymentGateway extends BaseContract {
   getFunction(
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "updateFee"
-  ): TypedContractMethod<[_feeBasisPoints: BigNumberish], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "updateFeeRecipient"
-  ): TypedContractMethod<[_feeRecipient: AddressLike], [void], "nonpayable">;
 
-  getEvent(
-    key: "FeeRecipientUpdated"
-  ): TypedContractEvent<
-    FeeRecipientUpdatedEvent.InputTuple,
-    FeeRecipientUpdatedEvent.OutputTuple,
-    FeeRecipientUpdatedEvent.OutputObject
-  >;
-  getEvent(
-    key: "FeeUpdated"
-  ): TypedContractEvent<
-    FeeUpdatedEvent.InputTuple,
-    FeeUpdatedEvent.OutputTuple,
-    FeeUpdatedEvent.OutputObject
-  >;
   getEvent(
     key: "OwnershipTransferred"
   ): TypedContractEvent<
@@ -397,28 +268,6 @@ export interface SandPaymentGateway extends BaseContract {
   >;
 
   filters: {
-    "FeeRecipientUpdated(address)": TypedContractEvent<
-      FeeRecipientUpdatedEvent.InputTuple,
-      FeeRecipientUpdatedEvent.OutputTuple,
-      FeeRecipientUpdatedEvent.OutputObject
-    >;
-    FeeRecipientUpdated: TypedContractEvent<
-      FeeRecipientUpdatedEvent.InputTuple,
-      FeeRecipientUpdatedEvent.OutputTuple,
-      FeeRecipientUpdatedEvent.OutputObject
-    >;
-
-    "FeeUpdated(uint16)": TypedContractEvent<
-      FeeUpdatedEvent.InputTuple,
-      FeeUpdatedEvent.OutputTuple,
-      FeeUpdatedEvent.OutputObject
-    >;
-    FeeUpdated: TypedContractEvent<
-      FeeUpdatedEvent.InputTuple,
-      FeeUpdatedEvent.OutputTuple,
-      FeeUpdatedEvent.OutputObject
-    >;
-
     "OwnershipTransferred(address,address)": TypedContractEvent<
       OwnershipTransferredEvent.InputTuple,
       OwnershipTransferredEvent.OutputTuple,
